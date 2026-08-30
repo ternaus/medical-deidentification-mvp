@@ -1,0 +1,12 @@
+.DS_Store
+.models/
+.next/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+frontend/node_modules/
+frontend/out/
+local-data/
+output/
+tmp/
