@@ -247,7 +247,7 @@ The LLM anonymizes each block through targeted replacements and returns every re
 
 The reconstructed document contains no source text layer, annotations, form values, attachments, document metadata, or source pixels from text regions. This rule prevents a covered or visually replaced identifier from remaining extractable. The result page gives Kolya a direct way to report a clinically meaningful OCR or anonymization error.
 
-Clinically relevant non-text regions, such as ECG traces or plots, may be copied into the reconstructed document and remain visible in the result. The application excludes or sanitizes barcodes, QR codes, signatures, stamps, photographs, and other non-text regions that can identify the patient.
+Clinically relevant non-text regions, such as ECG traces, plots, signatures, stamps, and photographs, remain visible in the reconstructed document. The application detects and masks barcodes and QR codes, including OCR blocks geometrically tied to them, so machine-readable identifiers do not survive in either the image or text layer.
 
 The output must remain readable by the target external LLM. Exact reproduction of the source font and layout is not required. Tables, headings, and reading order are preserved only to the extent needed to keep clinical meaning unambiguous.
 

@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+import cv2
+import numpy as np
 import pypdfium2 as pdfium
 from PIL import Image, ImageDraw, ImageOps
 from pypdf import PdfReader
@@ -25,6 +28,8 @@ from medical_deid.redaction import EntityMatch, RedactionChange, RedactionError,
 
 _FONT_NAME = "MedicalDeidUnicode"
 _FONT_PATH = Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
+_DEFAULT_CPU_THREAD_CAP = 12
+_CODE_RELATED_BLOCK_PADDING = 16
 _IDENTIFIER_KINDS = {
     "address",
     "birth_date",
@@ -52,6 +57,49 @@ _MONTHS = {
     "ноября": 11,
     "декабря": 12,
 }
+_DOCUMENT_DATE_LABELS = (
+    "дата взятия биоматериала",
+    "дата взятия образца",
+    "дата поступления образца",
+    "дата исследования",
+    "дата назначения",
+    "дата выполнения",
+    "дата проведения",
+    "дата обследования",
+    "дата приёма",
+    "дата приема",
+    "дата посещения",
+    "дата выдачи",
+    "дата документа",
+    "дата забора",
+    "дата доставки",
+    "дата",
+)
+_DOCUMENT_DATE_LABEL_PATTERN = "|".join(
+    re.escape(label) for label in sorted(_DOCUMENT_DATE_LABELS, key=len, reverse=True)
+)
+_DATE_TOKEN_PATTERN = (
+    r"(?:\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+(?:"
+    + "|".join(_MONTHS)
+    + r")\s+\d{4})"
+)
+_DOCUMENT_DATE_RE = re.compile(
+    rf"(?P<label>{_DOCUMENT_DATE_LABEL_PATTERN})"
+    r"(?!\s+(?:рождения|печати|утверждения|подпис))\s*:\s*"
+    rf"(?P<value>{_DATE_TOKEN_PATTERN})",
+    flags=re.IGNORECASE,
+)
+_CONTACT_LABEL_RE = re.compile(
+    r"(?:контактн\w*\s+телефон|телефон(?:\s+пациента)?|мобильн\w*|e[- ]?mail|"
+    r"электронн\w+\s+почт\w*)\s*[:№-]?\s*$",
+    flags=re.IGNORECASE,
+)
+_PATIENT_CONTEXT_RE = re.compile(
+    r"\b(?:пациент\w*|ф\.?\s*и\.?\s*о\.?|адрес(?:\s+(?:проживания|регистрации))?|"
+    r"телефон(?:\s+пациента)?|мобильн\w*|e[- ]?mail|электронн\w+\s+почт\w*|"
+    r"место\s+работы|работа)\b",
+    flags=re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -72,15 +120,20 @@ class RedactedBlock:
     source: OcrBlock
     text: str
     changes: list[RedactionChange]
-    omit: bool = False
-    force_visible: bool = False
 
 
 class LocalMedicalPipeline(DocumentProcessor):
     """Process one local upload without sending its text or pixels to a service."""
 
-    def __init__(self, models_dir: Path = Path(".models")) -> None:
+    def __init__(
+        self,
+        models_dir: Path = Path(".models"),
+        cpu_threads: int | None = None,
+    ) -> None:
+        if cpu_threads is not None and cpu_threads < 1:
+            raise ValueError("cpu_threads must be positive")
         self._models_dir = models_dir
+        self._cpu_threads = cpu_threads or _recommended_cpu_threads()
 
     def process(self, source_path: Path, result_path: Path) -> None:
         """Create a safe PDF only when OCR and local-model proposals validate."""
@@ -108,6 +161,9 @@ class LocalMedicalPipeline(DocumentProcessor):
             "SURYA_INFERENCE_BACKEND": "llamacpp",
             "SURYA_INFERENCE_PARALLEL": "1",
         }
+        environment["LLAMA_CPP_EXTRA_ARGS"] = _append_llama_threads(
+            os.environ.get("LLAMA_CPP_EXTRA_ARGS"), self._cpu_threads
+        )
         completed = subprocess.run(
             [str(command), str(source_path), "--images", "--output_dir", str(output_dir)],
             check=False,
@@ -126,11 +182,8 @@ class LocalMedicalPipeline(DocumentProcessor):
     def _redact_blocks(self, blocks: list[OcrBlock], work_dir: Path) -> list[RedactedBlock]:
         entities_by_page = self._llm_entities(blocks, work_dir)
         all_text = "\n".join(block.text for block in blocks)
-        document_date = _latest_document_date(all_text)
+        document_date = _document_date(all_text)
         birth_dates = _birth_dates_from_proposals(entities_by_page)
-        omitted_blocks = _signature_panel_blocks(blocks)
-        institution_contact_blocks = _institution_contact_block_ids(blocks)
-        doctor_signature_blocks = {id(block) for block in blocks if _is_doctor_attribution(block.text)}
         placeholder_counts: dict[str, int] = {}
         redacted: list[RedactedBlock] = []
 
@@ -138,12 +191,7 @@ class LocalMedicalPipeline(DocumentProcessor):
             entities = _regex_entities(block.text) + entities_by_page.get(block.page_number, {}).get(
                 id(block), []
             )
-            if id(block) in institution_contact_blocks:
-                entities = [
-                    entity
-                    for entity in entities
-                    if entity.kind not in {"address", "email", "phone", "workplace"}
-                ]
+            entities = _filter_entities_for_block(block.text, entities)
             if not any(entity.kind == "birth_date" for entity in entities):
                 entities.extend(_matching_birth_dates(block.text, birth_dates))
             entities = _with_age_replacement(block.text, entities, document_date)
@@ -157,8 +205,6 @@ class LocalMedicalPipeline(DocumentProcessor):
                     source=block,
                     text=sanitized,
                     changes=changes,
-                    omit=id(block) in omitted_blocks,
-                    force_visible=id(block) in doctor_signature_blocks,
                 )
             )
         return redacted
@@ -175,6 +221,7 @@ class LocalMedicalPipeline(DocumentProcessor):
                 page_blocks,
                 work_dir / f"llm-page-{page_number}.json",
                 self._model_path(),
+                self._cpu_threads,
             )
             page_entities: dict[int, list[EntityMatch]] = {}
             for fragment_id, entity in proposals:
@@ -193,6 +240,23 @@ class LocalMedicalPipeline(DocumentProcessor):
             if candidate.is_file():
                 return candidate
         raise ProcessingError("The local identifier model is not available yet.")
+
+
+def _recommended_cpu_threads() -> int:
+    return max(1, min(os.cpu_count() or 1, _DEFAULT_CPU_THREAD_CAP))
+
+
+def _append_llama_threads(extra_args: str | None, cpu_threads: int) -> str:
+    tokens = shlex.split(extra_args or "")
+    if not _has_llama_option(tokens, "--threads"):
+        tokens.extend(("--threads", str(cpu_threads)))
+    if not _has_llama_option(tokens, "--threads-batch"):
+        tokens.extend(("--threads-batch", str(cpu_threads)))
+    return shlex.join(tokens)
+
+
+def _has_llama_option(tokens: list[str], option: str) -> bool:
+    return any(token == option or token.startswith(f"{option}=") for token in tokens)
 
 
 def _surya_command() -> Path:
@@ -269,9 +333,11 @@ def _extract_entities_with_llm(
     blocks: list[OcrBlock],
     schema_path: Path,
     model_path: Path,
+    cpu_threads: int | None = None,
 ) -> list[tuple[int, EntityMatch]]:
     if not blocks:
         return []
+    threads = cpu_threads or _recommended_cpu_threads()
     fragments = "\n".join(
         f"[{index}] {block.text}" for index, block in enumerate(blocks, start=1)
     )
@@ -312,6 +378,10 @@ def _extract_entities_with_llm(
             "--log-disable",
             "--n-predict",
             "2048",
+            "--threads",
+            str(threads),
+            "--threads-batch",
+            str(threads),
             "--prompt",
             prompt,
         ],
@@ -393,8 +463,26 @@ def _regex_entities(text: str) -> list[EntityMatch]:
         ),
     ]
     for kind, pattern in patterns:
-        matches.extend(EntityMatch(text=match.group(0), kind=kind) for match in re.finditer(pattern, text))
+        for match in re.finditer(pattern, text):
+            if kind in {"email", "phone"} and not _is_labeled_contact(text, match.start()):
+                continue
+            matches.append(EntityMatch(text=match.group(0), kind=kind))
     return matches
+
+
+def _is_labeled_contact(text: str, start: int) -> bool:
+    prefix = text[max(0, start - 80) : start]
+    return _CONTACT_LABEL_RE.search(prefix) is not None
+
+
+def _filter_entities_for_block(text: str, entities: list[EntityMatch]) -> list[EntityMatch]:
+    if _PATIENT_CONTEXT_RE.search(text):
+        return entities
+    return [
+        entity
+        for entity in entities
+        if entity.kind not in {"address", "email", "phone", "workplace"}
+    ]
 
 
 def _with_age_replacement(
@@ -483,9 +571,19 @@ def _age_word(age: int) -> str:
     return "лет"
 
 
-def _latest_document_date(text: str) -> date | None:
+def _document_date(text: str) -> date | None:
+    labelled_dates = [
+        (match.group("label").casefold(), _parse_date(match.group("value")))
+        for match in _DOCUMENT_DATE_RE.finditer(text)
+    ]
+    labelled_dates = [(label, parsed) for label, parsed in labelled_dates if parsed is not None]
+    if labelled_dates:
+        for label in _DOCUMENT_DATE_LABELS:
+            preferred = [parsed for candidate, parsed in labelled_dates if candidate == label]
+            if preferred:
+                return max(preferred)
     dates = [parsed for candidate in _date_candidates(text) if (parsed := _parse_date(candidate))]
-    return max(dates, default=None)
+    return dates[0] if len(dates) == 1 else None
 
 
 def _date_candidates(text: str) -> list[str]:
@@ -531,7 +629,9 @@ def _write_searchable_pdf(
     for block in blocks:
         blocks_by_page.setdefault(block.source.page_number, []).append(block)
 
-    sanitized_pages = _sanitize_source_pixels(page_paths, blocks_by_page, work_dir / "sanitized")
+    sanitized_pages, code_omitted_blocks = _sanitize_source_pixels(
+        page_paths, blocks_by_page, work_dir / "sanitized"
+    )
 
     for page_number, page_path in enumerate(sanitized_pages, start=1):
         with Image.open(page_path) as image:
@@ -540,9 +640,9 @@ def _write_searchable_pdf(
         pdf.drawImage(ImageReader(str(page_path)), 0, 0, width=width, height=height)
         page_blocks = blocks_by_page.get(page_number, [])
         for block in page_blocks:
-            if block.omit:
+            if id(block.source) in code_omitted_blocks:
                 continue
-            if block.changes or block.force_visible:
+            if block.changes:
                 _draw_visible_replacement(pdf, block, width, height)
             else:
                 _draw_sanitized_text_layer(pdf, block, width, height)
@@ -600,137 +700,87 @@ def _sanitize_source_pixels(
     page_paths: list[Path],
     blocks_by_page: dict[int, list[RedactedBlock]],
     output_dir: Path,
-) -> list[Path]:
+) -> tuple[list[Path], set[int]]:
     output_dir.mkdir(parents=True, exist_ok=True)
     sanitized: list[Path] = []
+    code_omitted_blocks: set[int] = set()
     for page_number, page_path in enumerate(page_paths, start=1):
         with Image.open(page_path) as source:
             image = source.convert("RGB")
         draw = ImageDraw.Draw(image)
         page_blocks = blocks_by_page.get(page_number, [])
+        code_boxes = _detect_code_boxes(image)
+        for code_box in code_boxes:
+            draw.rectangle(code_box, fill="white")
         for block in page_blocks:
-            should_omit = _should_omit_block(block.source, *image.size)
-            if block.changes or block.omit or should_omit:
-                padding = 48 if should_omit else 16
-                draw.rectangle(_padded_bbox(block.source, *image.size, padding=padding), fill="white")
-            if block.force_visible:
-                draw.rectangle(_rendered_bbox(block.source, *image.size), fill="white")
-                draw.rectangle(_doctor_signature_bbox(block.source, *image.size), fill="white")
-        _erase_blue_signature_ink(image, [block.source for block in page_blocks])
+            related_to_code = any(
+                _code_related_to_box(block.source, code_box, *image.size)
+                for code_box in code_boxes
+            )
+            if related_to_code:
+                code_omitted_blocks.add(id(block.source))
+            if block.changes or related_to_code:
+                draw.rectangle(
+                    _padded_bbox(
+                        block.source,
+                        *image.size,
+                        padding=_CODE_RELATED_BLOCK_PADDING,
+                    ),
+                    fill="white",
+                )
         destination = output_dir / page_path.name
         image.save(destination)
         sanitized.append(destination)
-    return sanitized
+    return sanitized, code_omitted_blocks
 
 
-def _should_omit_block(block: OcrBlock, page_width: int, page_height: int) -> bool:
-    if "ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ" in block.text.upper():
-        return True
-    if block.label != "Picture":
-        return False
-    x0, y0, x1, y1 = block.bbox
-    image_width, image_height = block.image_size or (page_width, page_height)
-    return (x1 - x0) * (y1 - y0) / (image_width * image_height) < 0.15
+def _detect_code_boxes(image: Image.Image) -> list[tuple[float, float, float, float]]:
+    frame = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+    boxes: list[tuple[float, float, float, float]] = []
+
+    qr_detected, qr_points = cv2.QRCodeDetector().detectMulti(frame)
+    if qr_detected and qr_points is not None:
+        boxes.extend(_point_boxes(qr_points))
+
+    barcode_detected, barcode_points = cv2.barcode_BarcodeDetector().detectMulti(frame)
+    if barcode_detected and barcode_points is not None:
+        boxes.extend(_point_boxes(barcode_points))
+    return boxes
 
 
-def _is_institution_contact_block(text: str) -> bool:
-    institution_markers = (
-        "БОЛЬНИЦ",
-        "ГБУЗ",
-        "ИНВИТРО",
-        "КЛИНИК",
-        "ЛАБОРАТОР",
-        "МЕДИЦИНСК",
-        "ПОЛИКЛИНИК",
-        "ООО",
-    )
-    normalized = text.upper()
-    return any(marker in normalized for marker in institution_markers)
-
-
-def _institution_contact_block_ids(blocks: list[OcrBlock]) -> set[int]:
-    institution_blocks = {
-        id(block) for block in blocks if _is_institution_contact_block(block.text)
-    }
-    institution_pages = {block.page_number for block in blocks if id(block) in institution_blocks}
-    patient_starts = {
-        page_number: min(
-            block.bbox[1]
-            for block in blocks
-            if block.page_number == page_number
-            and re.search(r"\b(?:пациент|фио)\b", block.text, flags=re.IGNORECASE)
+def _point_boxes(points: object) -> list[tuple[float, float, float, float]]:
+    array = np.asarray(points, dtype=float)
+    if array.size == 0:
+        return []
+    boxes = []
+    for quadrilateral in array.reshape(-1, 4, 2):
+        x_coordinates = quadrilateral[:, 0]
+        y_coordinates = quadrilateral[:, 1]
+        boxes.append(
+            (
+                float(x_coordinates.min()),
+                float(y_coordinates.min()),
+                float(x_coordinates.max()),
+                float(y_coordinates.max()),
+            )
         )
-        for page_number in institution_pages
-        if any(
-            block.page_number == page_number
-            and re.search(r"\b(?:пациент|фио)\b", block.text, flags=re.IGNORECASE)
-            for block in blocks
-        )
-    }
-    for block in blocks:
-        if block.page_number not in patient_starts or id(block) in institution_blocks:
-            continue
-        if block.bbox[1] >= patient_starts[block.page_number]:
-            continue
-        if re.search(r"(?i)\b(?:тел|факс)\b|www\.|@", block.text):
-            institution_blocks.add(id(block))
-    for header in blocks:
-        if id(header) not in institution_blocks:
-            continue
-        header_x0, _, _, header_y1 = header.bbox
-        for block in blocks:
-            block_x0, block_y0, _, _ = block.bbox
-            if (
-                block.page_number == header.page_number
-                and 0 <= block_y0 - header_y1 <= 80
-                and abs(block_x0 - header_x0) <= 80
-            ):
-                institution_blocks.add(id(block))
-    return institution_blocks
+    return boxes
 
 
-def _erase_blue_signature_ink(image: Image.Image, blocks: list[OcrBlock]) -> None:
-    pixels = image.load()
-    page_width, page_height = image.size
-    for block in blocks:
-        if not _is_doctor_attribution(block.text):
-            continue
-        x0, y0, x1, y1 = _rendered_bbox(block, page_width, page_height)
-        line_height = y1 - y0
-        left = max(0, int(x0 - 16))
-        right = min(page_width, int(x1 + 16))
-        top = max(0, int(y0 - 5 * line_height))
-        bottom = min(page_height, int(y1 + 2 * line_height))
-        for y_coordinate in range(top, bottom):
-            for x_coordinate in range(left, right):
-                red, green, blue = pixels[x_coordinate, y_coordinate]
-                if blue > 100 and blue > red + 10 and blue > green + 5:
-                    pixels[x_coordinate, y_coordinate] = (255, 255, 255)
-
-
-def _is_doctor_attribution(text: str) -> bool:
-    if re.search(r"\bврач", text, flags=re.IGNORECASE) is None:
-        return False
-    return re.search(
-        r"\bврач\s*:\s*\d{1,2}[./-]\d{1,2}[./-]\d{4}\b",
-        text,
-        flags=re.IGNORECASE,
-    ) is None
-
-
-def _doctor_signature_bbox(
+def _code_related_to_box(
     block: OcrBlock,
+    code_box: tuple[float, float, float, float],
     page_width: int,
     page_height: int,
-) -> tuple[float, float, float, float]:
-    x0, y0, x1, y1 = _rendered_bbox(block, page_width, page_height)
-    line_height = y1 - y0
-    return (
-        max(0, x0 - 16),
-        max(0, y1 - 0.25 * line_height),
-        min(page_width, x0 + max(100, 0.45 * (x1 - x0))),
-        min(page_height, y1 + 2 * line_height),
-    )
+) -> bool:
+    block_x0, block_y0, block_x1, block_y1 = _rendered_bbox(block, page_width, page_height)
+    code_x0, code_y0, code_x1, code_y1 = code_box
+    horizontal_overlap = min(block_x1, code_x1) - max(block_x0, code_x0)
+    if horizontal_overlap <= 0:
+        return False
+    if block_y0 < code_y1:
+        return block_y1 > code_y0
+    return block_y0 - code_y1 <= max(1, code_y1 - code_y0)
 
 
 def _image_size(raw_bbox: object) -> tuple[float, float] | None:
@@ -770,28 +820,6 @@ def _padded_bbox(
         min(page_width, x1 + padding),
         min(page_height, y1 + padding),
     )
-
-
-def _signature_panel_blocks(blocks: list[OcrBlock]) -> set[int]:
-    """Return the OCR blocks that belong to an electronic-signature panel."""
-    headers = [
-        block
-        for block in blocks
-        if "ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ" in block.text.upper()
-    ]
-    omitted: set[int] = set()
-    for header in headers:
-        header_x0, header_y0, _, header_y1 = header.bbox
-        for block in blocks:
-            x0, y0, _, y1 = block.bbox
-            if (
-                block.page_number == header.page_number
-                and x0 >= header_x0 - 8
-                and y0 >= header_y0 - 8
-                and y1 <= header_y1 + 360
-            ):
-                omitted.add(id(block))
-    return omitted
 
 
 def _validate_export(path: Path, blocks: list[RedactedBlock]) -> None:

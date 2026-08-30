@@ -497,6 +497,8 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "numpy" },
+    { name = "opencv-python-headless" },
     { name = "pillow" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
@@ -519,6 +521,8 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "numpy", specifier = ">=2.2.0,<3" },
+    { name = "opencv-python-headless", specifier = ">=4.11.0,<5" },
     { name = "pillow", specifier = ">=10.2.0,<11" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pypdf", specifier = ">=5.8.0" },

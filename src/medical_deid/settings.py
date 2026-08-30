@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("local-data")
     max_upload_bytes: int = 25 * 1024 * 1024
     processing_enabled: bool = True
+    cpu_threads: int | None = Field(default=None, gt=0)
 
     @property
     def database_path(self) -> Path:

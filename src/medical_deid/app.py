@@ -66,7 +66,7 @@ def create_app(
     elif resolved_settings.processing_enabled:
         from medical_deid.pipeline import LocalMedicalPipeline
 
-        selected_processor = LocalMedicalPipeline()
+        selected_processor = LocalMedicalPipeline(cpu_threads=resolved_settings.cpu_threads)
     else:
         selected_processor = DisabledProcessor()
     coordinator = ProcessingCoordinator(repository, selected_processor)
