@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-deid.local/schema/session-1.0.json",
+  "title": "Medical de-identification session",
+  "type": "object",
+  "required": ["id", "status", "sourceLabel", "sourceText", "resultText", "changes", "warnings", "createdAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-]{8,64}$" },
+    "status": { "enum": ["ready", "processing", "completed", "deleted", "failed"] },
+    "sourceLabel": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "sourceText": { "type": "string", "maxLength": 50000 },
+    "resultText": { "type": "string", "maxLength": 50000 },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "source", "replacement", "reason"],
+        "properties": {
+          "kind": { "enum": ["identifier", "visual_mask"] },
+          "source": { "type": "string" },
+          "replacement": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
