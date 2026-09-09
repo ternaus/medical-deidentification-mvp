@@ -158,7 +158,9 @@ def create_app(
         try:
             repository.save_feedback(session_id, cleaned_text)
         except SessionNotFoundError as error:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.") from error
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Session not found."
+            ) from error
         return FeedbackResponse(saved=True)
 
     @app.delete("/api/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -166,7 +168,9 @@ def create_app(
         try:
             repository.delete(session_id)
         except SessionNotFoundError as error:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.") from error
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Session not found."
+            ) from error
         except ValueError as error:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -182,7 +186,9 @@ def _get_session_or_404(repository: SessionRepository, session_id: str) -> Sessi
     try:
         return repository.get(session_id)
     except SessionNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.") from error
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found."
+        ) from error
 
 
 app = create_app()

@@ -53,8 +53,7 @@ class SessionRepository:
                 """
             )
             columns = {
-                row[1]
-                for row in connection.execute("PRAGMA table_info(sessions)").fetchall()
+                row[1] for row in connection.execute("PRAGMA table_info(sessions)").fetchall()
             }
             if "updated_at" not in columns:
                 connection.execute("ALTER TABLE sessions ADD COLUMN updated_at TEXT")

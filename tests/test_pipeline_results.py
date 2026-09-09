@@ -108,9 +108,7 @@ def test_signature_picture_is_preserved_when_no_code_is_detected(
     assert omitted_blocks == set()
 
 
-def test_detected_code_masks_its_picture_and_caption(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_detected_code_masks_its_picture_and_caption(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "medical_deid.pipeline._detect_code_boxes", lambda image: [(80, 40, 120, 80)]
     )
@@ -213,9 +211,10 @@ def test_known_birth_date_is_detected_when_ocr_glues_it_to_a_name() -> None:
 
 
 def test_public_institution_contact_is_not_a_regex_patient_entity() -> None:
-    assert _regex_entities(
-        "ИНВИТРО СПБ ООО 8-800-200-363-0 Санкт-Петербург, ул. Бухарестская, д. 78"
-    ) == []
+    assert (
+        _regex_entities("ИНВИТРО СПБ ООО 8-800-200-363-0 Санкт-Петербург, ул. Бухарестская, д. 78")
+        == []
+    )
 
 
 def test_labeled_patient_phone_is_detected_by_regex() -> None:
@@ -228,10 +227,13 @@ def test_contact_proposals_need_patient_context() -> None:
     institution_text = "ИНВИТРО СПБ ООО 8-800-200-363-0 Санкт-Петербург, ул. Бухарестская, д. 78"
     patient_text = "Адрес проживания: Санкт-Петербург, ул. Ленина, д. 1"
 
-    assert _filter_entities_for_block(
-        institution_text,
-        [EntityMatch(text="8-800-200-363-0", kind="phone")],
-    ) == []
+    assert (
+        _filter_entities_for_block(
+            institution_text,
+            [EntityMatch(text="8-800-200-363-0", kind="phone")],
+        )
+        == []
+    )
     assert _filter_entities_for_block(
         patient_text,
         [EntityMatch(text="Санкт-Петербург, ул. Ленина, д. 1", kind="address")],

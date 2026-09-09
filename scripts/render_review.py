@@ -25,7 +25,9 @@ def main() -> int:
             raise ValueError(f"Different page counts in {session_dir.name}.")
         review_dir = session_dir / "review"
         review_dir.mkdir(exist_ok=True)
-        for page_number, (before, after) in enumerate(zip(before_pages, after_pages, strict=True), start=1):
+        for page_number, (before, after) in enumerate(
+            zip(before_pages, after_pages, strict=True), start=1
+        ):
             _write_pair(before, after, review_dir / f"page-{page_number:03}.png", session_dir.name)
     return 0
 
@@ -36,7 +38,10 @@ def _render(path: Path) -> list[Image.Image]:
             return [ImageOps.exif_transpose(image).convert("RGB")]
     document = pdfium.PdfDocument(str(path))
     try:
-        return [document[index].render(scale=1).to_pil().convert("RGB") for index in range(len(document))]
+        return [
+            document[index].render(scale=1).to_pil().convert("RGB")
+            for index in range(len(document))
+        ]
     finally:
         document.close()
 
