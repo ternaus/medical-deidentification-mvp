@@ -20,7 +20,9 @@ def main() -> int:
     """Process every supported file and save an inspectable local run manifest."""
     arguments = _parse_arguments()
     sources = sorted(
-        path for path in arguments.source_dir.iterdir() if path.is_file() and path.suffix.lower() in _SUFFIXES
+        path
+        for path in arguments.source_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in _SUFFIXES
     )
     if not sources:
         raise SystemExit("The corpus directory has no supported PDF, JPG, JPEG, or PNG files.")
@@ -52,7 +54,9 @@ def main() -> int:
                 }
             )
             continue
-        extracted_text = "\n".join(page.extract_text() or "" for page in PdfReader(str(result_path)).pages)
+        extracted_text = "\n".join(
+            page.extract_text() or "" for page in PdfReader(str(result_path)).pages
+        )
         (session_dir / "extracted-result.txt").write_text(extracted_text, encoding="utf-8")
         records.append(
             {

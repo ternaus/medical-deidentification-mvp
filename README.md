@@ -204,6 +204,12 @@ Run the Python tests:
 uv run pytest
 ```
 
+Run the repository checks:
+
+```bash
+uv run --locked pre-commit run --all-files
+```
+
 Build the shared interface:
 
 ```bash
@@ -228,3 +234,9 @@ tests/                   pipeline, storage, API, and transport tests
 ```
 
 The implementation and delivery contract is in [`docs/greenfield-desktop-delivery-plan.md`](docs/greenfield-desktop-delivery-plan.md). The earlier product and deployment decisions are recorded in [`docs/design.md`](docs/design.md); treat that document as design history where the current code or delivery plan differs.
+
+## License
+
+Medical Deid is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE). The license permits noncommercial use, modification, and distribution, including the research uses described in its terms.
+
+Commercial use is not granted under these terms. Obtain a separate commercial license from the copyright holder before using Medical Deid for a commercial purpose.

@@ -9,6 +9,7 @@ on:
       - "services/**"
       - "src/**"
       - "scripts/build_desktop_worker.py"
+      - "LICENSE"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/desktop-build.yml"

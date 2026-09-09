@@ -100,7 +100,9 @@ def _find_exact_occurrences(text: str, candidate: str) -> list[int]:
         end = start + len(candidate)
         before = text[start - 1] if start else ""
         after = text[end] if end < len(text) else ""
-        if not _continues_token(before, candidate[0]) and not _continues_token(after, candidate[-1]):
+        if not _continues_token(before, candidate[0]) and not _continues_token(
+            after, candidate[-1]
+        ):
             occurrences.append(start)
         start = text.find(candidate, start + len(candidate))
     return occurrences
