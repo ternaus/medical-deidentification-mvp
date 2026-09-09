@@ -109,7 +109,7 @@ npm --prefix apps/ui run dev
 
 Open <http://127.0.0.1:5173>. The interface downloads and verifies the same model assets as the desktop application.
 
-Set `MEDICAL_DEID_DATA_DIR` before starting the API to keep models and sessions in a specific directory. `MEDICAL_DEID_HOST`, `MEDICAL_DEID_PORT`, and `MEDICAL_DEID_RELOAD=1` override the development server defaults. Keep the host on `127.0.0.1` unless the remote data boundary described above has been implemented.
+Set `MEDICAL_DEID_DATA_DIR` before starting the API to keep models and sessions in a specific directory. The local adapter listens on `127.0.0.1:8000`; the Vite proxy sends browser requests to that address.
 
 ### Run the native application from source
 
