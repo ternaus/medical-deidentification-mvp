@@ -193,7 +193,7 @@ class LocalMedicalPipeline(DocumentProcessor):
         return _parse_surya_results(results[0])
 
     def _redact_blocks(self, blocks: list[OcrBlock], work_dir: Path) -> list[RedactedBlock]:
-        entities_by_page = self._llm_entities(blocks, work_dir)
+        entities_by_page = self._llm_entities(blocks, work_dir, self._model_path())
         all_text = "\n".join(block.text for block in blocks)
         document_date = _document_date(all_text)
         birth_dates = _birth_dates_from_proposals(entities_by_page)
@@ -226,6 +226,7 @@ class LocalMedicalPipeline(DocumentProcessor):
         self,
         blocks: list[OcrBlock],
         work_dir: Path,
+        model_path: Path,
     ) -> dict[int, dict[int, list[EntityMatch]]]:
         entities_by_page: dict[int, dict[int, list[EntityMatch]]] = {}
         for page_number in sorted({block.page_number for block in blocks}):
@@ -233,7 +234,7 @@ class LocalMedicalPipeline(DocumentProcessor):
             proposals = _extract_entities_with_llm(
                 page_blocks,
                 work_dir / f"llm-page-{page_number}.json",
-                self._model_path(),
+                model_path,
                 self._cpu_threads,
             )
             page_entities: dict[int, list[EntityMatch]] = {}

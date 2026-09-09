@@ -35,6 +35,10 @@ class WebTransport implements Transport {
     return response.json() as Promise<DocumentSession>;
   }
 
+  documents() {
+    return this.request<DocumentSession[]>("/api/documents");
+  }
+
   document(sessionId: string) {
     return this.request<DocumentSession>(`/api/documents/${sessionId}`);
   }
@@ -86,6 +90,10 @@ class DesktopTransport implements Transport {
     return this.invoke<DocumentSession>("create_document_path", {
       source_path: sourcePath,
     });
+  }
+
+  documents() {
+    return this.invoke<DocumentSession[]>("documents");
   }
 
   document(sessionId: string) {

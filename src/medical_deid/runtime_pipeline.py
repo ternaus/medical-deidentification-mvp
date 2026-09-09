@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 from medical_deid_core.models import ModelStore
 
 from .pipeline import (
-    OcrBlock,
     _IDENTIFIER_KINDS,
+    OcrBlock,
     _entity_schema,
     _html_to_text,
     _image_size,
@@ -30,8 +30,21 @@ class ModelStorePipeline(BasePipeline):
         super().__init__(models_dir=store.root, cpu_threads=cpu_threads)
         self._store = store
         self._surya_manager: Any | None = None
+        self._active_model_path: Path | None = None
+
+    def process(self, source_path: Path, result_path: Path) -> None:
+        self._active_model_path = self._resolve_model_path()
+        try:
+            super().process(source_path, result_path)
+        finally:
+            self._active_model_path = None
 
     def _model_path(self) -> Path:
+        if self._active_model_path is not None:
+            return self._active_model_path
+        return self._resolve_model_path()
+
+    def _resolve_model_path(self) -> Path:
         try:
             return self._store.model_path()
         except Exception as error:
@@ -71,6 +84,7 @@ class ModelStorePipeline(BasePipeline):
         self,
         blocks: list[OcrBlock],
         work_dir: Path,
+        model_path: Path,
     ) -> dict[int, dict[int, list[EntityMatch]]]:
         entities_by_page: dict[int, dict[int, list[EntityMatch]]] = {}
         for page_number in sorted({block.page_number for block in blocks}):
@@ -80,7 +94,7 @@ class ModelStorePipeline(BasePipeline):
             proposals = _extract_entities_with_qwen(
                 page_blocks,
                 work_dir / f"llm-page-{page_number}.json",
-                self._model_path(),
+                model_path,
                 self._store.runtime_binary("llama-cli"),
                 self._cpu_threads or _recommended_cpu_threads(),
                 self._store.runtime_spec().backend != "cpu",

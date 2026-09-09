@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from medical_deid.sessions import SessionRepository
+
 ROOT = Path(__file__).resolve().parents[2]
 PYTHONPATH = os.pathsep.join(
     [
@@ -70,3 +72,33 @@ def test_worker_reports_setup_and_rejects_document_before_model_install(tmp_path
     finally:
         if process.poll() is None:
             process.kill()
+
+
+def test_worker_lists_sessions_recovered_after_relaunch(tmp_path) -> None:
+    repository = SessionRepository(tmp_path / "sessions.sqlite3", tmp_path / "sessions")
+    repository.initialize()
+    recovered = repository.create("recovered.pdf", ".pdf", b"%PDF-source")
+    process = subprocess.Popen(
+        [sys.executable, "-m", "medical_deid_worker"],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "MEDICAL_DEID_DATA_DIR": str(tmp_path),
+            "PYTHONPATH": PYTHONPATH,
+        },
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        sessions = send(
+            process, {"schema_version": "1.0", "request_id": "r1", "operation": "documents"}
+        )
+
+        assert sessions["ok"] is True
+        assert [session["id"] for session in sessions["data"]] == [recovered.id]
+    finally:
+        if process.poll() is None:
+            send(process, {"schema_version": "1.0", "request_id": "r2", "operation": "shutdown"})
+            process.wait(timeout=2)

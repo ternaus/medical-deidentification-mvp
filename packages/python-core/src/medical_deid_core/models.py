@@ -135,6 +135,7 @@ class ModelStore:
         self._lock = threading.RLock()
         self._worker: threading.Thread | None = None
         self._state = self._read_state()
+        self._recover_interrupted_install()
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
@@ -498,6 +499,18 @@ class ModelStore:
             return json.loads((self.root / "model-state.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return {}
+
+    def _recover_interrupted_install(self) -> None:
+        install = self._state.get("install")
+        if not isinstance(install, dict) or install.get("state") != "downloading":
+            return
+        self._state["install"] = {
+            **install,
+            "state": "failed",
+            "current_asset": None,
+            "error": "download_interrupted",
+        }
+        self._write_state()
 
     def _write_state(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)

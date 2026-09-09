@@ -143,6 +143,8 @@ def dispatch(message: dict[str, Any]) -> bool:
             response(request_id, MODELS.select(str(message.get("profile_id"))))
         elif operation == "create_document_path":
             response(request_id, create_document_from_path(message))
+        elif operation == "documents":
+            response(request_id, [session_response(record) for record in REPOSITORY.list_recent()])
         elif operation == "document":
             response(request_id, session_response(REPOSITORY.get(str(message.get("session_id")))))
         elif operation == "save_result":

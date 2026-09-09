@@ -43,6 +43,11 @@ progress { width: 100%; height: 8px; accent-color: #78a9ff; }
 .download-link { border: 0; padding: 0; color: inherit; background: transparent; font-weight: 800; text-decoration: underline; }
 .processing { color: #a9c9ff; background: #142943; }
 .upload-card { display: grid; gap: 16px; }
+.session-card { display: grid; gap: 16px; margin-top: 20px; }
+.session-list { display: grid; gap: 8px; }
+.session-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; border: 1px solid #2a3f5a; border-radius: 10px; padding: 11px 14px; color: #c7daef; background: #0a1625; text-align: left; }
+.session-item:hover, .session-item.selected { border-color: #398c6c; }
+.session-item span:last-child { color: #91a8c5; font-size: .8rem; }
 .model-settings { justify-self: start; }
 .file-button { width: fit-content; display: inline-block; }
 .file-button input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }

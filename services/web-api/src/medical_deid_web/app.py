@@ -128,6 +128,10 @@ def create_app(store: ModelStore | None = None) -> FastAPI:
         coordinator.submit(record.id)
         return _session_response(record)
 
+    @app.get("/api/documents", response_model=list[DocumentSession])
+    def documents() -> list[DocumentSession]:
+        return [_session_response(record) for record in repository.list_recent()]
+
     @app.get("/api/documents/{session_id}", response_model=DocumentSession)
     def document_status(session_id: str) -> DocumentSession:
         try:

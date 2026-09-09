@@ -59,6 +59,7 @@ export interface Transport {
   installModel(profileId: string): Promise<ModelInventory>;
   selectModel(profileId: string): Promise<ModelInventory>;
   uploadDocument(document?: File): Promise<DocumentSession | null>;
+  documents(): Promise<DocumentSession[]>;
   document(sessionId: string): Promise<DocumentSession>;
   resultUrl(sessionId: string): string | null;
   saveResult(sessionId: string): Promise<void>;

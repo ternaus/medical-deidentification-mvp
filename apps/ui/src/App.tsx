@@ -10,14 +10,23 @@ export default function App() {
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [models, setModels] = useState<ModelInventory | null>(null);
   const [session, setSession] = useState<DocumentSession | null>(null);
+  const [sessions, setSessions] = useState<DocumentSession[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showModelSettings, setShowModelSettings] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [nextRuntime, nextModels] = await Promise.all([transport.runtime(), transport.models()]);
+    const [nextRuntime, nextModels, nextSessions] = await Promise.all([
+      transport.runtime(),
+      transport.models(),
+      transport.documents(),
+    ]);
     setRuntime(nextRuntime);
     setModels(nextModels);
+    setSessions(nextSessions);
+    setSession(
+      (current) => nextSessions.find((candidate) => candidate.id === current?.id) ?? nextSessions[0] ?? null,
+    );
   }, [transport]);
 
   useEffect(() => {
@@ -35,7 +44,13 @@ export default function App() {
   useEffect(() => {
     if (!session || session.status === "completed" || session.status === "failed") return;
     const timer = window.setInterval(() => {
-      transport.document(session.id).then(setSession).catch((reason: unknown) => setError(messageFrom(reason)));
+      transport
+        .document(session.id)
+        .then((nextSession) => {
+          setSession(nextSession);
+          setSessions((current) => updateSession(current, nextSession));
+        })
+        .catch((reason: unknown) => setError(messageFrom(reason)));
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [session, transport]);
@@ -71,7 +86,10 @@ export default function App() {
     setError(null);
     try {
       const nextSession = await transport.uploadDocument(file);
-      if (nextSession) setSession(nextSession);
+      if (nextSession) {
+        setSession(nextSession);
+        setSessions((current) => updateSession(current, nextSession));
+      }
     } catch (reason) {
       setError(messageFrom(reason));
     } finally {
@@ -164,7 +182,34 @@ export default function App() {
               {busy === "upload" ? "Добавляю в очередь…" : "Выбрать документ"}
             </label>
           )}
-          {session && <SessionStatus session={session} resultUrl={transport.resultUrl(session.id)} onSave={() => transport.saveResult(session.id)} />}
+        </section>
+      )}
+
+      {sessions.length > 0 && session && (
+        <section className="card session-card">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">ДОКУМЕНТЫ</p>
+              <h2>Недавние документы</h2>
+            </div>
+          </div>
+          <div className="session-list">
+            {sessions.map((candidate) => (
+              <button
+                className={`session-item ${candidate.id === session.id ? "selected" : ""}`}
+                key={candidate.id}
+                onClick={() => setSession(candidate)}
+              >
+                <span>{candidate.sourceFilename}</span>
+                <span>{sessionLabel(candidate)}</span>
+              </button>
+            ))}
+          </div>
+          <SessionStatus
+            session={session}
+            resultUrl={transport.resultUrl(session.id)}
+            onSave={() => transport.saveResult(session.id)}
+          />
         </section>
       )}
 
@@ -248,4 +293,14 @@ function preflightLabel(blocker: string) {
 
 function messageFrom(reason: unknown) {
   return reason instanceof Error ? reason.message : "Не удалось выполнить операцию.";
+}
+
+function updateSession(sessions: DocumentSession[], nextSession: DocumentSession) {
+  return [nextSession, ...sessions.filter((candidate) => candidate.id !== nextSession.id)];
+}
+
+function sessionLabel(session: DocumentSession) {
+  if (session.status === "completed") return "Готово";
+  if (session.status === "failed") return "Ошибка";
+  return session.status === "running" ? "Обработка" : "В очереди";
 }
