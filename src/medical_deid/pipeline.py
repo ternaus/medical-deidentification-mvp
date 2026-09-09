@@ -27,7 +27,18 @@ from medical_deid.processing import DocumentProcessor, ProcessingError
 from medical_deid.redaction import EntityMatch, RedactionChange, RedactionError, apply_replacements
 
 _FONT_NAME = "MedicalDeidUnicode"
-_FONT_PATH = Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
+_FONT_PATH = next(
+    (
+        path
+        for path in (
+            Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+            Path("/Library/Fonts/Arial Unicode.ttf"),
+            Path("C:/Windows/Fonts/arial.ttf"),
+        )
+        if path.is_file()
+    ),
+    None,
+)
 _DEFAULT_CPU_THREAD_CAP = 12
 _CODE_RELATED_BLOCK_PADDING = 16
 _IDENTIFIER_KINDS = {
@@ -621,7 +632,7 @@ def _write_searchable_pdf(
     blocks: list[RedactedBlock],
     work_dir: Path,
 ) -> None:
-    if not _FONT_PATH.is_file():
+    if _FONT_PATH is None:
         raise ProcessingError("The local PDF font is not available.")
     pdfmetrics.registerFont(TTFont(_FONT_NAME, str(_FONT_PATH)))
     pdf = Canvas(str(destination))

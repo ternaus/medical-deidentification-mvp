@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build the Python worker for a Tauri target")
-    parser.add_argument("--target", required=True, help="Rust target triple, for example x86_64-pc-windows-msvc")
+    parser.add_argument(
+        "--target", required=True, help="Rust target triple, for example x86_64-pc-windows-msvc"
+    )
     parser.add_argument("--clean", action="store_true")
     args = parser.parse_args()
     output = ROOT / "apps" / "desktop" / "src-tauri" / "binaries"
@@ -30,7 +32,13 @@ def main() -> int:
         "--specpath",
         str(ROOT / ".build" / "pyinstaller"),
         "--paths",
+        str(ROOT / "src"),
+        "--paths",
         str(ROOT / "packages" / "python-core" / "src"),
+        "--collect-submodules",
+        "surya",
+        "--collect-data",
+        "surya",
         str(ROOT / "packages" / "desktop-worker" / "src" / "medical_deid_worker" / "main.py"),
     ]
     if args.clean:

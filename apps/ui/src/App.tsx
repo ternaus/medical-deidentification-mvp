@@ -1,142 +1,251 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ReviewSession, RuntimeInfo } from "@medical-deid/contract";
-import { selectTransport } from "./transport";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { DocumentSession, ModelInventory, ModelProfile, RuntimeInfo } from "@medical-deid/contract";
+import { isDesktopTransport, selectTransport } from "./transport";
 import "./styles.css";
+
+const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
   const transport = useMemo(selectTransport, []);
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
-  const [session, setSession] = useState<ReviewSession | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [models, setModels] = useState<ModelInventory | null>(null);
+  const [session, setSession] = useState<DocumentSession | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showModelSettings, setShowModelSettings] = useState(false);
 
-  useEffect(() => {
-    transport.runtime().then(setRuntime).catch((reason: Error) => setError(reason.message));
+  const refresh = useCallback(async () => {
+    const [nextRuntime, nextModels] = await Promise.all([transport.runtime(), transport.models()]);
+    setRuntime(nextRuntime);
+    setModels(nextModels);
   }, [transport]);
 
-  async function openFixture() {
-    setBusy(true);
+  useEffect(() => {
+    refresh().catch((reason: unknown) => setError(messageFrom(reason)));
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!models?.profiles.some((profile) => profile.state === "downloading")) return;
+    const timer = window.setInterval(() => {
+      refresh().catch((reason: unknown) => setError(messageFrom(reason)));
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [models, refresh]);
+
+  useEffect(() => {
+    if (!session || session.status === "completed" || session.status === "failed") return;
+    const timer = window.setInterval(() => {
+      transport.document(session.id).then(setSession).catch((reason: unknown) => setError(messageFrom(reason)));
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [session, transport]);
+
+  async function install(profile: ModelProfile) {
+    setBusy(profile.id);
     setError(null);
-    setFeedback(null);
     try {
-      setSession(await transport.createReviewSession());
+      setModels(await transport.installModel(profile.id));
+      await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось открыть fixture");
+      setError(messageFrom(reason));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  async function sendFeedback(rating: "correct" | "incorrect") {
-    if (!session) return;
+  async function select(profile: ModelProfile) {
+    setBusy(profile.id);
+    setError(null);
     try {
-      await transport.feedback(session.id, { rating });
-      setFeedback(rating === "correct" ? "Спасибо, разметка подтверждена." : "Записано: требуется разбор.");
+      setModels(await transport.selectModel(profile.id));
+      await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось сохранить отзыв");
+      setError(messageFrom(reason));
+    } finally {
+      setBusy(null);
     }
   }
 
-  async function deleteSession() {
-    if (!session) return;
-    await transport.removeSession(session.id);
-    setSession(null);
-    setFeedback(null);
+  async function upload(file?: File) {
+    setBusy("upload");
+    setError(null);
+    try {
+      const nextSession = await transport.uploadDocument(file);
+      if (nextSession) setSession(nextSession);
+    } catch (reason) {
+      setError(messageFrom(reason));
+    } finally {
+      setBusy(null);
+    }
   }
 
-  const isReview = runtime?.mode === "review";
+  const ready = runtime?.processingEnabled === true;
+  const desktop = isDesktopTransport();
+  const downloading = models?.profiles.some((profile) => profile.state === "downloading") ?? false;
 
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">MEDICAL DEID · GREENFIELD</p>
-          <h1>Проверка обезличивания</h1>
+          <p className="eyebrow">MEDICAL DEID · LOCAL</p>
+          <h1>Обезличивание документов на этом устройстве</h1>
         </div>
-        <span className={`status ${isReview ? "review" : "local"}`}>
-          {isReview ? "Interface review" : "Local processing"}
-        </span>
+        <span className={`status ${ready ? "ready" : "setup"}`}>{ready ? "Готово" : "Нужна настройка"}</span>
       </header>
 
       <section className="notice">
-        <strong>{isReview ? "Синтетические данные only" : "Локальная обработка"}</strong>
+        <strong>{ready ? "Модели установлены" : "Сначала нужно скачать модели"}</strong>
         <span>
-          {isReview
-            ? "Это безопасный UI-срез. Произвольные медицинские файлы отключены до установки подписанного model package."
-            : "Документ остаётся на этом устройстве; перед запуском worker проходит hardware и model preflight."}
+          {ready
+            ? "Документ анализируется локально и не отправляется на сервер."
+            : "Выберите профиль и нажмите «Скачать». Приложение проверит файлы перед включением анализа."}
         </span>
       </section>
 
-      <section className="toolbar">
-        <div>
-          <h2>Рабочая область</h2>
-          <p className="muted">Один документ за сессию · PDF, JPG, JPEG, PNG</p>
-        </div>
-        <button className="primary" disabled={busy} onClick={openFixture}>
-          {busy ? "Открываю…" : "Открыть synthetic fixture"}
-        </button>
-      </section>
-
       {error && <p className="error">{error}</p>}
-      {!session ? (
-        <section className="empty card">
-          <div className="empty-icon">＋</div>
-          <h2>Документ ещё не выбран</h2>
-          <p>Нажмите кнопку выше, чтобы проверить весь review-flow без реальных данных.</p>
+
+      {(!ready || showModelSettings) && models && (
+        <section className="card setup-card">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">{ready ? "НАСТРОЙКИ" : "ШАГ 1"}</p>
+              <h2>{ready ? "Выберите другую модель" : "Модели и ускорение"}</h2>
+            </div>
+            <span className="accelerator">{models.runtime.label} · {runtime?.accelerator?.state === "ready" ? "готово" : "будет установлено"}</span>
+          </div>
+          <p className="muted setup-copy">
+            В комплект установки входят OCR и выбранная Qwen. Лёгкий профиль подходит для первого запуска;
+            более тяжёлый можно поставить позднее в настройках.
+          </p>
+          <div className="profiles">
+            {models.profiles.map((profile) => (
+              <ModelCard
+                key={profile.id}
+                profile={profile}
+                downloading={downloading}
+                busy={busy === profile.id}
+                selected={models.selectedProfile === profile.id}
+                onInstall={() => install(profile)}
+                onSelect={() => select(profile)}
+              />
+            ))}
+          </div>
+          {models.preflight && models.preflight.blockers.length > 0 && (
+            <p className="warning">Перед анализом: {models.preflight.blockers.map(preflightLabel).join(" · ")}</p>
+          )}
         </section>
-      ) : (
-        <>
-          <section className="comparison">
-            <DocumentCard title="До" label={session.sourceLabel} text={session.sourceText} />
-            <DocumentCard title="После" label="reconstructed-result.pdf" text={session.resultText} safe />
-          </section>
-          <section className="details card">
-            <div className="details-head">
-              <div>
-                <p className="eyebrow">CHANGE LOG</p>
-                <h2>{session.changes.length} изменения</h2>
-              </div>
-              <button className="ghost" onClick={deleteSession}>Удалить сессию</button>
+      )}
+
+      {ready && (
+        <section className="card upload-card">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">АНАЛИЗ</p>
+              <h2>Загрузите документ</h2>
             </div>
-            <div className="change-list">
-              {session.changes.map((change) => (
-                <div className="change" key={`${change.source}-${change.reason}`}>
-                  <span className="change-kind">{change.kind === "identifier" ? "ID" : "MASK"}</span>
-                  <code>{change.source}</code>
-                  <span className="arrow">→</span>
-                  <code>{change.replacement}</code>
-                  <span className="muted">{change.reason}</span>
-                </div>
-              ))}
-            </div>
-            <div className="feedback-row">
-              <span>Результат выглядит корректно?</span>
-              <button className="feedback" onClick={() => sendFeedback("correct")}>Да</button>
-              <button className="feedback danger" onClick={() => sendFeedback("incorrect")}>Нужна проверка</button>
-              {feedback && <span className="feedback-message">{feedback}</span>}
-            </div>
-          </section>
-          {session.warnings.map((warning) => <p className="warning" key={warning}>⚠ {warning}</p>)}
-        </>
+            <span className="accelerator">{runtime?.accelerator?.label ?? "Локальный runtime"}</span>
+          </div>
+          <p className="muted">PDF, JPG, JPEG или PNG до 25 МБ.</p>
+          <button className="secondary model-settings" onClick={() => setShowModelSettings((visible) => !visible)}>
+            {showModelSettings ? "Скрыть модели" : "Модели и ускорение"}
+          </button>
+          {desktop ? (
+            <button className="file-button" disabled={busy === "upload"} onClick={() => upload()}>
+              {busy === "upload" ? "Добавляю в очередь…" : "Выбрать документ"}
+            </button>
+          ) : (
+            <label className={`file-button ${busy === "upload" ? "disabled" : ""}`}>
+              <input
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                disabled={busy === "upload"}
+                onChange={(event) => upload(event.currentTarget.files?.[0])}
+                type="file"
+              />
+              {busy === "upload" ? "Добавляю в очередь…" : "Выбрать документ"}
+            </label>
+          )}
+          {session && <SessionStatus session={session} resultUrl={transport.resultUrl(session.id)} onSave={() => transport.saveResult(session.id)} />}
+        </section>
       )}
 
       <footer>
         <span>app {runtime?.appVersion ?? "…"} · core {runtime?.coreVersion ?? "…"}</span>
-        <span>{runtime?.modelStatus === "not_installed" ? "Model package не установлен" : runtime?.modelVersion}</span>
+        <span>{runtime?.modelVersion ?? "Qwen ещё не выбрана"}</span>
       </footer>
     </main>
   );
 }
 
-function DocumentCard({ title, label, text, safe = false }: { title: string; label: string; text: string; safe?: boolean }) {
+function ModelCard({
+  profile,
+  downloading,
+  busy,
+  selected,
+  onInstall,
+  onSelect,
+}: {
+  profile: ModelProfile;
+  downloading: boolean;
+  busy: boolean;
+  selected: boolean;
+  onInstall: () => void;
+  onSelect: () => void;
+}) {
+  const progress = profile.totalBytes > 0 ? Math.min(100, (profile.downloadedBytes / profile.totalBytes) * 100) : 0;
   return (
-    <article className={`document card ${safe ? "safe" : ""}`}>
-      <div className="document-head">
-        <div><span className="document-title">{title}</span><span className="muted">{label}</span></div>
-        <span className="badge">{safe ? "Проверено" : "Источник"}</span>
+    <article className={`profile ${selected ? "selected" : ""}`}>
+      <div className="profile-title">
+        <div>
+          <strong>{profile.label}</strong>
+          {profile.recommended && <span className="recommended">рекомендуется</span>}
+        </div>
+        <span>{formatBytes(profile.sizeBytes)}</span>
       </div>
-      <pre>{text}</pre>
+      <p>{profile.description}</p>
+      <p className="muted">от {formatBytes(profile.minMemoryBytes)} RAM · {formatBytes(profile.minFreeDiskBytes)} свободного места</p>
+      {profile.state === "downloading" && (
+        <div className="download-progress">
+          <div><span>{profile.currentAsset ?? "Подготавливаю"}</span><span>{Math.round(progress)}%</span></div>
+          <progress max="100" value={progress} />
+        </div>
+      )}
+      {profile.state === "failed" && <p className="error">{profile.error ?? "Скачивание не завершилось"}</p>}
+      {profile.state === "ready" ? (
+        <button className="secondary" disabled={selected || busy} onClick={onSelect}>
+          {selected ? "Выбрана" : "Использовать эту модель"}
+        </button>
+      ) : (
+        <button className="primary" disabled={downloading || busy} onClick={onInstall}>
+          {busy ? "Запускаю…" : "Скачать"}
+        </button>
+      )}
     </article>
   );
+}
+
+function SessionStatus({ session, resultUrl, onSave }: { session: DocumentSession; resultUrl: string | null; onSave: () => void }) {
+  if (session.status === "completed") {
+    return resultUrl ? <p className="success">Готово. <a href={resultUrl}>Скачать обезличенный PDF</a></p> : <p className="success">Готово. <button className="download-link" onClick={onSave}>Сохранить обезличенный PDF</button></p>;
+  }
+  if (session.status === "failed") return <p className="error">{session.errorMessage ?? "Анализ не завершился безопасно."}</p>;
+  return <p className="processing">{session.status === "queued" ? "Документ в очереди…" : "OCR и поиск идентификаторов выполняются…"}</p>;
+}
+
+function formatBytes(bytes: number) {
+  return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} ГБ`;
+}
+
+function preflightLabel(blocker: string) {
+  return {
+    insufficient_memory: "недостаточно RAM",
+    insufficient_disk: "недостаточно свободного места",
+    model_not_installed: "модель не скачана",
+    ocr_not_installed: "OCR не скачан",
+    runtime_not_installed: "runtime не скачан",
+    unsupported_platform: "неподдерживаемая платформа",
+  }[blocker] ?? blocker;
+}
+
+function messageFrom(reason: unknown) {
+  return reason instanceof Error ? reason.message : "Не удалось выполнить операцию.";
 }

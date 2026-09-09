@@ -14,6 +14,23 @@ struct WorkerState {
 }
 
 #[tauri::command]
+fn pick_document() -> Option<String> {
+    rfd::FileDialog::new()
+        .add_filter("Medical documents", &["pdf", "jpg", "jpeg", "png"])
+        .pick_file()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn pick_result_destination() -> Option<String> {
+    rfd::FileDialog::new()
+        .add_filter("PDF", &["pdf"])
+        .set_file_name("anonymized-document.pdf")
+        .save_file()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 fn worker_request(state: State<'_, WorkerState>, request: Value) -> Result<Value, String> {
     let request_id = request
         .get("request_id")
@@ -102,7 +119,11 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![worker_request])
+        .invoke_handler(tauri::generate_handler![
+            worker_request,
+            pick_document,
+            pick_result_destination
+        ])
         .run(tauri::generate_context!())
         .expect("error while running medical-deid");
 }

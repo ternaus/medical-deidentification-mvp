@@ -1,58 +1,4 @@
-import type {
-  FeedbackPayload,
-  ReviewSession,
-  RuntimeInfo,
-  Transport,
-} from "@medical-deid/contract";
-
-const fixture: ReviewSession = {
-  id: "review-fixture",
-  status: "completed",
-  sourceLabel: "synthetic-review.pdf",
-  sourceText:
-    "Пациент: Иван Петров\nДата рождения: 14.03.1984\nДата визита: 02.09.2026\nТелефон: +7 900 123-45-67\nРезультат: контрольный осмотр без особенностей.",
-  resultText:
-    "Пациент: [ИМЯ УДАЛЕНО]\nДата рождения: [ДАТА УДАЛЕНА]\nДата визита: 02.09.2026\nТелефон: [ТЕЛЕФОН УДАЛЁН]\nРезультат: контрольный осмотр без особенностей.",
-  changes: [
-    { kind: "identifier", source: "Иван Петров", replacement: "[ИМЯ УДАЛЕНО]", reason: "person_name" },
-    { kind: "identifier", source: "14.03.1984", replacement: "[ДАТА УДАЛЕНА]", reason: "date_of_birth" },
-    { kind: "identifier", source: "+7 900 123-45-67", replacement: "[ТЕЛЕФОН УДАЛЁН]", reason: "phone_number" },
-  ],
-  warnings: [
-    "Интерфейсный fixture: исходный документ не покидает приложение.",
-    "Результат не предназначен для клинического или production-использования.",
-  ],
-  createdAt: new Date().toISOString(),
-};
-
-const runtime: RuntimeInfo = {
-  mode: "review",
-  processingEnabled: false,
-  appVersion: "0.1.0",
-  coreVersion: "0.1.0",
-  ocrVersion: "not-loaded",
-  modelVersion: null,
-  modelStatus: "not_installed",
-  supportedFormats: ["pdf", "jpg", "jpeg", "png"],
-};
-
-class ReviewTransport implements Transport {
-  async runtime() {
-    return runtime;
-  }
-
-  async createReviewSession() {
-    return { ...fixture, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
-  }
-
-  async session(id: string) {
-    return { ...fixture, id };
-  }
-
-  async feedback(_id: string, _payload: FeedbackPayload) {}
-
-  async removeSession(_id: string) {}
-}
+import type { DocumentSession, ModelInventory, RuntimeInfo, Transport } from "@medical-deid/contract";
 
 class WebTransport implements Transport {
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -68,20 +14,37 @@ class WebTransport implements Transport {
     return this.request<RuntimeInfo>("/api/runtime");
   }
 
-  createReviewSession() {
-    return this.request<ReviewSession>("/api/review/session", { method: "POST" });
+  models() {
+    return this.request<ModelInventory>("/api/models");
   }
 
-  session(id: string) {
-    return this.request<ReviewSession>(`/api/sessions/${id}`);
+  installModel(profileId: string) {
+    return this.request<ModelInventory>(`/api/models/${profileId}/install`, { method: "POST" });
   }
 
-  async feedback(id: string, payload: FeedbackPayload) {
-    await this.request(`/api/sessions/${id}/feedback`, { method: "POST", body: JSON.stringify(payload) });
+  selectModel(profileId: string) {
+    return this.request<ModelInventory>(`/api/models/${profileId}/select`, { method: "POST" });
   }
 
-  async removeSession(id: string) {
-    await this.request(`/api/sessions/${id}`, { method: "DELETE" });
+  async uploadDocument(document?: File) {
+    if (!document) throw new Error("Сначала выберите документ.");
+    const form = new FormData();
+    form.append("document", document);
+    const response = await fetch("/api/documents", { method: "POST", body: form });
+    if (!response.ok) throw new Error((await response.json()).detail ?? `HTTP ${response.status}`);
+    return response.json() as Promise<DocumentSession>;
+  }
+
+  document(sessionId: string) {
+    return this.request<DocumentSession>(`/api/documents/${sessionId}`);
+  }
+
+  resultUrl(sessionId: string) {
+    return `/api/documents/${sessionId}/result`;
+  }
+
+  async saveResult(sessionId: string) {
+    window.location.assign(this.resultUrl(sessionId));
   }
 }
 
@@ -102,28 +65,48 @@ class DesktopTransport implements Transport {
   }
 
   runtime() {
-    return this.invoke<RuntimeInfo>("initialize", { runtime_mode: "review" });
+    return this.invoke<RuntimeInfo>("initialize");
   }
 
-  createReviewSession() {
-    return this.invoke<ReviewSession>("create_review_session");
+  models() {
+    return this.invoke<ModelInventory>("models");
   }
 
-  session(id: string) {
-    return this.invoke<ReviewSession>("get_session", { session_id: id });
+  installModel(profileId: string) {
+    return this.invoke<ModelInventory>("install_model", { profile_id: profileId });
   }
 
-  async feedback(id: string, payload: FeedbackPayload) {
-    await this.invoke("submit_feedback", { session_id: id, ...payload });
+  selectModel(profileId: string) {
+    return this.invoke<ModelInventory>("select_model", { profile_id: profileId });
   }
 
-  async removeSession(id: string) {
-    await this.invoke("delete_session", { session_id: id });
+  async uploadDocument() {
+    const sourcePath = await window.__TAURI__?.core.invoke<string | null>("pick_document");
+    if (!sourcePath) return null;
+    return this.invoke<DocumentSession>("create_document_path", {
+      source_path: sourcePath,
+    });
+  }
+
+  document(sessionId: string) {
+    return this.invoke<DocumentSession>("document", { session_id: sessionId });
+  }
+
+  resultUrl(_: string) {
+    return null;
+  }
+
+  async saveResult(sessionId: string) {
+    const destinationPath = await window.__TAURI__?.core.invoke<string | null>("pick_result_destination");
+    if (!destinationPath) return;
+    await this.invoke("save_result", { session_id: sessionId, destination_path: destinationPath });
   }
 }
 
 export function selectTransport(): Transport {
-  if (window.__TAURI__) return new DesktopTransport();
-  if (new URLSearchParams(window.location.search).get("mode") === "web") return new WebTransport();
-  return new ReviewTransport();
+  return window.__TAURI__ ? new DesktopTransport() : new WebTransport();
+}
+
+export function isDesktopTransport() {
+  return window.__TAURI__ !== undefined;
 }

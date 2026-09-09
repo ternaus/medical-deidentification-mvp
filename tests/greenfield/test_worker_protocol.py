@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PYTHONPATH = os.pathsep.join(
     [
+        str(ROOT / "src"),
         str(ROOT / "packages" / "python-core" / "src"),
         str(ROOT / "packages" / "desktop-worker" / "src"),
     ]
@@ -25,42 +26,45 @@ def send(process: subprocess.Popen[str], message: dict[str, object]) -> dict[str
     return json.loads(line)
 
 
-def test_worker_review_round_trip() -> None:
+def test_worker_reports_setup_and_rejects_document_before_model_install(tmp_path) -> None:
     process = subprocess.Popen(
         [sys.executable, "-m", "medical_deid_worker"],
         cwd=ROOT,
-        env={**os.environ, "PYTHONPATH": PYTHONPATH},
+        env={
+            **os.environ,
+            "MEDICAL_DEID_DATA_DIR": str(tmp_path),
+            "PYTHONPATH": PYTHONPATH,
+        },
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
     try:
-        initialized = send(process, {"schema_version": "1.0", "request_id": "r1", "operation": "initialize"})
-        assert initialized["ok"] is True
-        assert initialized["data"]["mode"] == "review"
-
-        created = send(
-            process,
-            {"schema_version": "1.0", "request_id": "r2", "operation": "create_review_session"},
+        initialized = send(
+            process, {"schema_version": "1.0", "request_id": "r1", "operation": "initialize"}
         )
-        assert created["data"]["status"] == "completed"
-        assert len(created["data"]["changes"]) == 3
-        assert "Иван Петров" not in created["data"]["resultText"]
+        assert initialized["ok"] is True
+        assert initialized["data"]["mode"] == "setup"
 
-        feedback = send(
+        models = send(process, {"schema_version": "1.0", "request_id": "r2", "operation": "models"})
+        assert models["data"]["profiles"][0]["id"] == "qwen3-4b-q4-k-m"
+
+        blocked = send(
             process,
             {
                 "schema_version": "1.0",
                 "request_id": "r3",
-                "operation": "submit_feedback",
-                "session_id": created["data"]["id"],
-                "rating": "correct",
+                "operation": "create_document_path",
+                "source_path": str(tmp_path / "scan.pdf"),
             },
         )
-        assert feedback["data"] == {"accepted": True}
+        assert blocked["ok"] is False
+        assert blocked["error"]["code"] == "models_are_not_ready"
 
-        stopped = send(process, {"schema_version": "1.0", "request_id": "r4", "operation": "shutdown"})
+        stopped = send(
+            process, {"schema_version": "1.0", "request_id": "r4", "operation": "shutdown"}
+        )
         assert stopped["data"]["stopped"] is True
         process.wait(timeout=2)
     finally:

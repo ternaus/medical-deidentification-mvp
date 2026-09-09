@@ -6,7 +6,11 @@ on:
     paths:
       - "apps/**"
       - "packages/**"
+      - "services/**"
+      - "src/**"
       - "scripts/build_desktop_worker.py"
+      - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/desktop-build.yml"
 
 jobs:
@@ -27,6 +31,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: astral-sh/setup-uv@v6
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,14 +42,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Install worker packager
-        run: python -m pip install "pyinstaller>=6.15"
+      - name: Install Python dependencies
+        run: uv sync --locked --group dev
       - name: Install UI dependencies
         run: npm ci --prefix apps/ui
       - name: Install desktop dependencies
         run: npm ci --prefix apps/desktop
       - name: Build worker sidecar
-        run: python scripts/build_desktop_worker.py --target ${{ matrix.target }} --clean
+        run: uv run python scripts/build_desktop_worker.py --target ${{ matrix.target }} --clean
       - name: Build UI
         run: npm --prefix apps/ui run build
       - name: Build desktop bundle
