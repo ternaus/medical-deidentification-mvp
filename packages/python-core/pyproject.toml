@@ -1,0 +1,10 @@
+[project]
+name = "medical-deid-core"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/medical_deid_core"]

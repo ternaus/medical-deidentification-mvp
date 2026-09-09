@@ -1,0 +1,60 @@
+{
+  "bridgeVersion": "3.6",
+  "kind": "google-docs-trusted-read",
+  "status": "complete",
+  "outputDir": "/Users/vladimiriglovikov/workspace/medical-deidentification-mvp/bridge/trusted-read-hardware-revision",
+  "target": {
+    "documentId": "1T6_DA7YBryu4iogdRVy6IlVHjssI5MfHLacwvyYKvPU",
+    "title": "Перспективность проекта: обезличивание медицинских документов",
+    "revisionId": "AIroW35FIzwC0UfdjlQdNAR7e-Y0GmX7q4sKBzsn5NVutbyjlKtO70OBJn_TQw10ZeFklfRlFw1kKnUaWDouE-MSCXBFU1f4ZYHBF3haLHQ",
+    "documentUrl": "https://docs.google.com/document/d/1T6_DA7YBryu4iogdRVy6IlVHjssI5MfHLacwvyYKvPU",
+    "selectedTabId": "t.0"
+  },
+  "dropdownMetadata": {
+    "status": "unavailable",
+    "resolvedTool": null,
+    "authoritative": false,
+    "count": 0
+  },
+  "controlAwareness": {
+    "hasProtectedControls": false,
+    "authoritativeDropdownCount": 0,
+    "opaqueControlCount": 0,
+    "affectedParagraphCount": 0,
+    "nativeElementCounts": {
+      "dateElement": 1,
+      "inlineObjectElement": 1
+    },
+    "preservationRequired": false,
+    "recommendedBehavior": "No protected controls were detected in the scanned scope."
+  },
+  "warnings": [],
+  "files": {
+    "document_result": {
+      "path": "/Users/vladimiriglovikov/workspace/medical-deidentification-mvp/bridge/trusted-read-hardware-revision/document-result.json",
+      "bytes": 202355,
+      "sha256": "aab677cb37e0eb8bf2eff0e19db87bc84298814ea8784b34c8c9d4f25a392a25"
+    },
+    "control_inventory": {
+      "path": "/Users/vladimiriglovikov/workspace/medical-deidentification-mvp/bridge/trusted-read-hardware-revision/control-inventory.json",
+      "bytes": 2572,
+      "sha256": "21e966837db3d16e58b5f27b2abd15e08fb679e18a7fd532ea11c0a7b5912411"
+    },
+    "document_outline": {
+      "path": "/Users/vladimiriglovikov/workspace/medical-deidentification-mvp/bridge/trusted-read-hardware-revision/document-outline.json",
+      "bytes": 56689,
+      "sha256": "6dfb9569704013ba6564bb9103f08b3bc7d5180aa69527064d8f659cf70ccde5"
+    },
+    "document_text": {
+      "path": "/Users/vladimiriglovikov/workspace/medical-deidentification-mvp/bridge/trusted-read-hardware-revision/document-text.md",
+      "bytes": 16104,
+      "sha256": "80b28751493de4710520a4013830b9e5802284de86b45b0d775996f1957cf43c"
+    },
+    "receipt": {
+      "path": "/Users/vladimiriglovikov/workspace/medical-deidentification-mvp/bridge/trusted-read-hardware-revision/receipt.json",
+      "bytes": 1114,
+      "sha256": "6df9c6cfc7becb4f281cfd789fb343e6405b3b05cc2e46d311365b525130e297"
+    }
+  },
+  "error": null
+}

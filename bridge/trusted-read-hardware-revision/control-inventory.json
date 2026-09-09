@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "kind": "google-docs-trusted-read-context",
+  "target": {
+    "documentId": "1T6_DA7YBryu4iogdRVy6IlVHjssI5MfHLacwvyYKvPU",
+    "title": "Перспективность проекта: обезличивание медицинских документов",
+    "revisionId": "AIroW35FIzwC0UfdjlQdNAR7e-Y0GmX7q4sKBzsn5NVutbyjlKtO70OBJn_TQw10ZeFklfRlFw1kKnUaWDouE-MSCXBFU1f4ZYHBF3haLHQ",
+    "documentUrl": "https://docs.google.com/document/d/1T6_DA7YBryu4iogdRVy6IlVHjssI5MfHLacwvyYKvPU",
+    "selectedTabId": "t.0"
+  },
+  "dropdownMetadata": {
+    "status": "unavailable",
+    "resolvedTool": null,
+    "authoritative": false,
+    "count": 0
+  },
+  "derivedControlInventory": {
+    "hasProtectedControls": false,
+    "authoritativeDropdownCount": 0,
+    "opaqueControlCount": 0,
+    "nativeElementCounts": {
+      "dateElement": 1,
+      "inlineObjectElement": 1
+    },
+    "tabsScanned": [
+      "t.0"
+    ],
+    "controls": [],
+    "nativeElements": [
+      {
+        "type": "dateElement",
+        "startIndex": 177,
+        "endIndex": 178,
+        "tabId": "t.0",
+        "segmentId": null,
+        "container": {
+          "kind": "paragraph",
+          "path": "root.tabs[0].body.content[3]",
+          "tabId": "t.0",
+          "segmentId": null,
+          "startIndex": 167,
+          "endIndex": 309,
+          "namedStyleType": "NORMAL_TEXT",
+          "listId": null,
+          "nestingLevel": null,
+          "table": null
+        },
+        "properties": {
+          "timestamp": "2026-08-30T21:00:00Z",
+          "locale": "ru",
+          "dateFormat": "DATE_FORMAT_MONTH_DAY_YEAR_ABBREVIATED",
+          "timeFormat": "TIME_FORMAT_DISABLED",
+          "displayText": "авг. 30, 2026"
+        }
+      },
+      {
+        "type": "inlineObjectElement",
+        "startIndex": 902,
+        "endIndex": 903,
+        "tabId": "t.0",
+        "segmentId": null,
+        "container": {
+          "kind": "paragraph",
+          "path": "root.tabs[0].body.content[9]",
+          "tabId": "t.0",
+          "segmentId": null,
+          "startIndex": 902,
+          "endIndex": 904,
+          "namedStyleType": "NORMAL_TEXT",
+          "listId": null,
+          "nestingLevel": null,
+          "table": null
+        },
+        "properties": {
+          "inlineObjectId": "kix.1ln85zdzvkn3",
+          "textStyle": {}
+        }
+      }
+    ]
+  },
+  "editGuidance": {
+    "advisoryOnly": true,
+    "requiresTargetedPreservation": false,
+    "recommendedBehavior": "No protected controls were detected in the scanned scope.",
+    "warnings": []
+  }
+}
