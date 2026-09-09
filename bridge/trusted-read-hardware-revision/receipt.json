@@ -1,0 +1,32 @@
+{
+  "bridgeVersion": "3.6",
+  "kind": "google-docs-trusted-read-receipt",
+  "status": "complete",
+  "target": {
+    "documentId": "1T6_DA7YBryu4iogdRVy6IlVHjssI5MfHLacwvyYKvPU",
+    "title": "Перспективность проекта: обезличивание медицинских документов",
+    "revisionId": "AIroW35FIzwC0UfdjlQdNAR7e-Y0GmX7q4sKBzsn5NVutbyjlKtO70OBJn_TQw10ZeFklfRlFw1kKnUaWDouE-MSCXBFU1f4ZYHBF3haLHQ",
+    "documentUrl": "https://docs.google.com/document/d/1T6_DA7YBryu4iogdRVy6IlVHjssI5MfHLacwvyYKvPU",
+    "selectedTabId": "t.0"
+  },
+  "dropdownMetadata": {
+    "status": "unavailable",
+    "resolvedTool": null,
+    "authoritative": false,
+    "count": 0
+  },
+  "controlAwareness": {
+    "hasProtectedControls": false,
+    "authoritativeDropdownCount": 0,
+    "opaqueControlCount": 0,
+    "affectedParagraphCount": 0,
+    "nativeElementCounts": {
+      "dateElement": 1,
+      "inlineObjectElement": 1
+    },
+    "preservationRequired": false,
+    "recommendedBehavior": "No protected controls were detected in the scanned scope."
+  },
+  "warnings": [],
+  "error": null
+}

@@ -10,6 +10,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from medical_deid.pipeline import (
     _FONT_NAME,
     _FONT_PATH,
+    LocalMedicalPipeline,
     OcrBlock,
     RedactedBlock,
     _append_llama_threads,
@@ -251,3 +252,12 @@ def test_llama_thread_arguments_preserve_explicit_environment_options() -> None:
     assert _append_llama_threads("--gpu-layers all --threads=8", 12) == (
         "--gpu-layers all --threads=8 --threads-batch 12"
     )
+
+
+def test_pipeline_uses_an_explicit_model_path(tmp_path: Path) -> None:
+    model_path = tmp_path / "candidate.gguf"
+    model_path.touch()
+
+    pipeline = LocalMedicalPipeline(llm_model_path=model_path)
+
+    assert pipeline._model_path() == model_path

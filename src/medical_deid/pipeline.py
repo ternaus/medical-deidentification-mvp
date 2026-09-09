@@ -140,11 +140,13 @@ class LocalMedicalPipeline(DocumentProcessor):
         self,
         models_dir: Path = Path(".models"),
         cpu_threads: int | None = None,
+        llm_model_path: Path | None = None,
     ) -> None:
         if cpu_threads is not None and cpu_threads < 1:
             raise ValueError("cpu_threads must be positive")
         self._models_dir = models_dir
         self._cpu_threads = cpu_threads or _recommended_cpu_threads()
+        self._llm_model_path = llm_model_path
 
     def process(self, source_path: Path, result_path: Path) -> None:
         """Create a safe PDF only when OCR and local-model proposals validate."""
@@ -241,6 +243,10 @@ class LocalMedicalPipeline(DocumentProcessor):
         return entities_by_page
 
     def _model_path(self) -> Path:
+        if self._llm_model_path is not None:
+            if self._llm_model_path.is_file():
+                return self._llm_model_path
+            raise ProcessingError("The requested local identifier model is not available yet.")
         candidates = [
             self._models_dir
             / "qwen3-next-80b-a3b-q4_k_m"

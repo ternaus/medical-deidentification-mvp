@@ -26,7 +26,10 @@ def main() -> int:
         raise SystemExit("The corpus directory has no supported PDF, JPG, JPEG, or PNG files.")
 
     arguments.output_dir.mkdir(parents=True, exist_ok=True)
-    pipeline = LocalMedicalPipeline(models_dir=arguments.models_dir)
+    pipeline = LocalMedicalPipeline(
+        models_dir=arguments.models_dir,
+        llm_model_path=arguments.llm_model_path,
+    )
     records = []
     for index, source in enumerate(sources, start=1):
         session_dir = arguments.output_dir / f"{index:02}-{source.stem}"
@@ -74,6 +77,11 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--models-dir", type=Path, default=Path(".models"))
+    parser.add_argument(
+        "--llm-model-path",
+        type=Path,
+        help="Use this GGUF for the LLM stage instead of the default baseline model.",
+    )
     return parser.parse_args()
 
 
