@@ -90,9 +90,7 @@ _DOCUMENT_DATE_LABEL_PATTERN = "|".join(
     re.escape(label) for label in sorted(_DOCUMENT_DATE_LABELS, key=len, reverse=True)
 )
 _DATE_TOKEN_PATTERN = (
-    r"(?:\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+(?:"
-    + "|".join(_MONTHS)
-    + r")\s+\d{4})"
+    r"(?:\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+(?:" + "|".join(_MONTHS) + r")\s+\d{4})"
 )
 _DOCUMENT_DATE_RE = re.compile(
     rf"(?P<label>{_DOCUMENT_DATE_LABEL_PATTERN})"
@@ -161,7 +159,9 @@ class LocalMedicalPipeline(DocumentProcessor):
         try:
             redacted_blocks = self._redact_blocks(blocks, work_dir)
         except RedactionError as error:
-            raise ProcessingError("An identifier proposal could not be verified against OCR text.") from error
+            raise ProcessingError(
+                "An identifier proposal could not be verified against OCR text."
+            ) from error
         _write_change_log(work_dir / "change-log.json", redacted_blocks)
         _write_searchable_pdf(result_path, pages, redacted_blocks, work_dir)
         _validate_export(result_path, redacted_blocks)
@@ -201,9 +201,9 @@ class LocalMedicalPipeline(DocumentProcessor):
         redacted: list[RedactedBlock] = []
 
         for block in blocks:
-            entities = _regex_entities(block.text) + entities_by_page.get(block.page_number, {}).get(
-                id(block), []
-            )
+            entities = _regex_entities(block.text) + entities_by_page.get(
+                block.page_number, {}
+            ).get(id(block), [])
             entities = _filter_entities_for_block(block.text, entities)
             if not any(entity.kind == "birth_date" for entity in entities):
                 entities.extend(_matching_birth_dates(block.text, birth_dates))
@@ -230,7 +230,9 @@ class LocalMedicalPipeline(DocumentProcessor):
     ) -> dict[int, dict[int, list[EntityMatch]]]:
         entities_by_page: dict[int, dict[int, list[EntityMatch]]] = {}
         for page_number in sorted({block.page_number for block in blocks}):
-            page_blocks = [block for block in blocks if block.page_number == page_number and block.text]
+            page_blocks = [
+                block for block in blocks if block.page_number == page_number and block.text
+            ]
             proposals = _extract_entities_with_llm(
                 page_blocks,
                 work_dir / f"llm-page-{page_number}.json",
@@ -356,9 +358,7 @@ def _extract_entities_with_llm(
     if not blocks:
         return []
     threads = cpu_threads or _recommended_cpu_threads()
-    fragments = "\n".join(
-        f"[{index}] {block.text}" for index, block in enumerate(blocks, start=1)
-    )
+    fragments = "\n".join(f"[{index}] {block.text}" for index, block in enumerate(blocks, start=1))
     schema_path.with_suffix(".schema.json").write_text(
         json.dumps(_entity_schema(), ensure_ascii=False), encoding="utf-8"
     )
@@ -367,8 +367,8 @@ def _extract_entities_with_llm(
         "документа. Не включай врачей, медсестёр, клиники, отделения, учреждения, диагнозы, "
         "исследования, результаты, референсы или даты лечения. Для каждого найденного значения верни "
         "точный фрагмент OCR без исправлений, fragment_id и тип. Если сомневаешься, верни пустой список. "
-        "Верни только JSON вида {\"entities\":[{\"fragment_id\":1,\"text\":\"...\","
-        "\"kind\":\"patient_name\"}]}. Допустимые kind: "
+        'Верни только JSON вида {"entities":[{"fragment_id":1,"text":"...",'
+        '"kind":"patient_name"}]}. Допустимые kind: '
         + ", ".join(sorted(_IDENTIFIER_KINDS))
         + ".\n\n"
         f"OCR-фрагменты:\n{fragments}"
@@ -522,9 +522,13 @@ def _with_age_replacement(
         if birth_date is None and _is_age_expression(entity.text):
             continue
         if birth_date is None or document_date is None or document_date <= birth_date:
-            raise ProcessingError("Date of birth was found but the document date could not be verified.")
-        age = document_date.year - birth_date.year - (
-            (document_date.month, document_date.day) < (birth_date.month, birth_date.day)
+            raise ProcessingError(
+                "Date of birth was found but the document date could not be verified."
+            )
+        age = (
+            document_date.year
+            - birth_date.year
+            - ((document_date.month, document_date.day) < (birth_date.month, birth_date.day))
         )
         labelled_date = re.search(
             r"дата\s+рождения\s*:\s*" + re.escape(birth_text),
@@ -552,7 +556,9 @@ def _with_age_replacement(
 
 
 def _is_age_expression(value: str) -> bool:
-    return re.fullmatch(r"\d{1,3}\s+(?:год|года|лет)", value.strip(), flags=re.IGNORECASE) is not None
+    return (
+        re.fullmatch(r"\d{1,3}\s+(?:год|года|лет)", value.strip(), flags=re.IGNORECASE) is not None
+    )
 
 
 def _birth_dates_from_proposals(
@@ -732,8 +738,7 @@ def _sanitize_source_pixels(
             draw.rectangle(code_box, fill="white")
         for block in page_blocks:
             related_to_code = any(
-                _code_related_to_box(block.source, code_box, *image.size)
-                for code_box in code_boxes
+                _code_related_to_box(block.source, code_box, *image.size) for code_box in code_boxes
             )
             if related_to_code:
                 code_omitted_blocks.add(id(block.source))

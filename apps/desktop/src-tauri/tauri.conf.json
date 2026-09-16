@@ -26,6 +26,7 @@
     "active": true,
     "targets": ["nsis", "dmg"],
     "icon": ["icons/icon.png"],
+    "resources": { "../../../LICENSE": "LICENSE" },
     "externalBin": ["binaries/medical-deid-worker"]
   }
 }
